@@ -328,11 +328,19 @@
 
       <button onclick="saveProfile()" class="w-full bg-blue-600 text-white font-bold py-3.5 rounded-xl shadow-lg hover:bg-blue-700 transition">저장하기</button>
 
-      <!-- 홈화면 바로가기 설치 버튼 -->
+      <!-- 홈화면 바로가기 설치 -->
+      <!-- A: 이미 설치된 경우 -->
+      <p id="installed-label" class="hidden text-center text-xs text-emerald-600 font-semibold py-1">✅ 이미 홈화면에 설치되어 있습니다</p>
+      <!-- B: Android — beforeinstallprompt 발생 시 표시 -->
       <button id="install-btn-profile" onclick="doInstall()"
         class="hidden w-full items-center justify-center gap-2 border-2 border-blue-300 text-blue-700 font-bold py-3.5 rounded-xl hover:bg-blue-50 transition">
         📲 홈화면 바로가기 추가
       </button>
+      <!-- C: 수동 안내 (버튼 없을 때 기본 표시) -->
+      <div id="install-manual-hint" class="hidden bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 text-xs text-gray-600 text-center leading-relaxed">
+        홈화면 설치: 브라우저 메뉴 <b>⋮</b> → <b>페이지를 앱으로 설치</b>
+      </div>
+      <!-- D: iOS 안내 -->
       <div id="ios-hint-profile" class="hidden bg-blue-50 border border-blue-200 rounded-xl px-4 py-3 text-xs text-blue-800 leading-relaxed text-center">
         📲 <b>홈화면 추가 방법</b><br>
         하단 공유 버튼(<span class="font-mono">⬆</span>) 누른 뒤<br>
@@ -529,9 +537,17 @@ async function fetchEvents() {
       return;
     }
 
+    const SKIP_TYPES = new Set(['공휴일', '토요휴업일', '일요일', '휴일']);
+    const HOLIDAY_NAMES = ['신정', '설날', '삼일절', '어린이날', '부처님오신날', '석가탄신일', '현충일', '광복절', '추석', '개천절', '한글날', '성탄절', '대체공휴일'];
+    const isSkip = r => {
+      if (SKIP_TYPES.has(r.JUBB_FOND_SC_NM)) return true;
+      if (HOLIDAY_NAMES.some(h => (r.EVENT_NM || '').includes(h))) return true;
+      const day = new Date(parseInt(r.AA_YMD.slice(0,4)), parseInt(r.AA_YMD.slice(4,6))-1, parseInt(r.AA_YMD.slice(6,8))).getDay();
+      return day === 0 || day === 6; // 일·토 제외
+    };
     const upcoming = rows
       .filter(r => r.AA_YMD >= from)
-      .filter(r => r.JUBB_FOND_SC_NM !== '공휴일')
+      .filter(r => !isSkip(r))
       .slice(0, 6);
 
     if (upcoming.length === 0) {
@@ -1262,18 +1278,30 @@ window.addEventListener('beforeinstallprompt', e => {
   e.preventDefault();
   _installPrompt = e;
   showInstallButtons();
+  document.getElementById('install-manual-hint')?.classList.add('hidden');
 });
 
 document.getElementById('install-btn').addEventListener('click', doInstall);
 
-window.addEventListener('appinstalled', hideInstallButtons);
+window.addEventListener('appinstalled', () => {
+  hideInstallButtons();
+  document.getElementById('installed-label')?.classList.remove('hidden');
+  document.getElementById('install-manual-hint')?.classList.add('hidden');
+});
 
-// iOS: beforeinstallprompt 없음 → 공유 버튼 안내 표시
-const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
-const isStandalone = window.navigator.standalone;
-if (isIOS && !isStandalone) {
-  const hint = document.getElementById('ios-hint-profile');
-  if (hint) hint.classList.remove('hidden');
+// 설치 상태별 초기 UI 결정
+const isIOS        = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
+const isStandalone = window.matchMedia('(display-mode: standalone)').matches || !!window.navigator.standalone;
+
+if (isStandalone) {
+  // 이미 PWA로 설치된 상태
+  document.getElementById('installed-label')?.classList.remove('hidden');
+} else if (isIOS) {
+  // 아이폰 브라우저 → 공유 메뉴 안내
+  document.getElementById('ios-hint-profile')?.classList.remove('hidden');
+} else {
+  // 안드로이드/PC 브라우저 → 수동 안내 기본 표시 (beforeinstallprompt 오면 버튼으로 교체)
+  document.getElementById('install-manual-hint')?.classList.remove('hidden');
 }
 </script>
 </body>
