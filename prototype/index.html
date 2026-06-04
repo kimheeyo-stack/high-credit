@@ -1,0 +1,884 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <title>하이학점</title>
+  <meta name="theme-color" content="#2563eb">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="apple-mobile-web-app-title" content="하이학점">
+  <link rel="manifest" href="manifest.json">
+  <link rel="apple-touch-icon" href="icon.svg">
+  <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <style>
+    body { font-family: 'Noto Sans KR', sans-serif; background: #F3F4F6; }
+    .no-scrollbar::-webkit-scrollbar { display: none; }
+    .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+    .app-screen { display: none; }
+    .app-screen.active { display: flex; flex-direction: column; flex: 1; overflow: hidden; }
+    input[type=number]::-webkit-inner-spin-button { -webkit-appearance: none; }
+    .grade-badge { display: inline-block; padding: 1px 8px; border-radius: 999px; font-size: 11px; font-weight: 700; }
+    .badge-pass  { background:#d1fae5; color:#065f46; }
+    .badge-fail  { background:#fee2e2; color:#991b1b; }
+    .card-fail   { border-color: #fca5a5; background: #fff5f5; }
+    .threshold-line        { position:absolute; top:0; bottom:0; width:2px; background:#dc2626; }
+    .threshold-line-orange { position:absolute; top:0; bottom:0; width:2px; background:#ea580c; }
+    .vtest-pass { background:#d1fae5; border-left:4px solid #10b981; }
+    .vtest-fail { background:#fee2e2; border-left:4px solid #ef4444; }
+    .input-warn { border-color: #f87171 !important; color: #dc2626; }
+    /* 모바일 실기기 / PWA 설치 후: 폰 프레임 제거, 풀스크린 */
+    @media (max-width: 430px) {
+      body { margin: 0 !important; padding: 0 !important; background: white !important;
+             display: block !important; }
+      #phone { width: 100vw !important; height: 100dvh !important;
+               border-radius: 0 !important; border: none !important;
+               box-shadow: none !important;
+               padding-top: env(safe-area-inset-top, 0px);
+               padding-bottom: env(safe-area-inset-bottom, 0px); }
+      .fake-statusbar { display: none !important; }
+    }
+    @media (display-mode: standalone) {
+      body { margin: 0 !important; padding: 0 !important; background: white !important;
+             display: block !important; }
+      #phone { width: 100vw !important; height: 100dvh !important;
+               border-radius: 0 !important; border: none !important;
+               box-shadow: none !important;
+               padding-top: env(safe-area-inset-top, 0px);
+               padding-bottom: env(safe-area-inset-bottom, 0px); }
+      .fake-statusbar { display: none !important; }
+    }
+  </style>
+</head>
+<body class="flex justify-center items-center min-h-screen my-8">
+
+<div id="phone" class="w-[390px] h-[844px] bg-white rounded-[40px] shadow-2xl overflow-hidden flex flex-col relative border-8 border-gray-800">
+
+  <!-- 상태바 (데스크톱 폰 프레임용 — 모바일/PWA에서는 숨김) -->
+  <div class="fake-statusbar w-full h-7 bg-white flex justify-between items-center px-6 pt-2 text-xs font-semibold text-gray-700 z-10 shrink-0">
+    <span>9:41</span>
+    <div class="w-24 h-4 bg-black rounded-full absolute left-1/2 -translate-x-1/2 top-2"></div>
+    <div class="space-x-1"><i class="fas fa-signal"></i><i class="fas fa-wifi"></i><i class="fas fa-battery-full"></i></div>
+  </div>
+
+  <!-- ───────── 화면 1: 홈 ───────── -->
+  <div id="screen-home" class="app-screen active">
+    <div class="flex justify-between items-center px-5 py-3 bg-white border-b border-gray-100 shrink-0">
+      <span class="text-xl font-black text-blue-600 tracking-tight">하이학점</span>
+      <button class="text-sm font-medium text-gray-700 bg-gray-100 px-3 py-1 rounded-full">김민준 ▾</button>
+    </div>
+    <div class="flex-1 overflow-y-auto no-scrollbar px-5 py-4 space-y-4">
+      <div class="bg-gradient-to-br from-blue-50 to-indigo-50 p-5 rounded-2xl border border-blue-100 shadow-sm">
+        <div class="flex justify-between items-center mb-2">
+          <span class="text-sm font-medium text-blue-800">🎓 졸업까지 남은 학점</span>
+          <span id="home-credit-label" class="text-sm font-bold text-blue-600">0 / 192 학점</span>
+        </div>
+        <div class="w-full h-4 bg-gray-200 rounded-full overflow-hidden mb-3">
+          <div id="home-progress-bar" class="h-full bg-blue-600 rounded-full transition-all duration-500" style="width:0%"></div>
+        </div>
+        <p class="text-xs text-gray-600">앞으로 <span id="home-remaining" class="font-bold text-indigo-600">192</span>학점 더 취득 필요</p>
+      </div>
+      <div class="grid grid-cols-2 gap-3">
+        <div onclick="switchScreen('screen-warning')" class="cursor-pointer p-4 rounded-xl border flex flex-col justify-between transition" id="home-warning-card">
+          <div class="flex items-center space-x-2 mb-1">
+            <i class="fas fa-exclamation-triangle text-sm"></i>
+            <span class="text-xs font-bold">⚠️ 미이수 위험</span>
+          </div>
+          <span id="home-warning-count" class="text-lg font-black">0과목</span>
+        </div>
+        <div class="bg-emerald-50 p-4 rounded-xl border border-emerald-100 flex flex-col justify-between">
+          <div class="flex items-center space-x-2 text-emerald-600 mb-1">
+            <i class="fas fa-check-circle text-sm"></i>
+            <span class="text-xs font-bold">✅ 이번 학기</span>
+          </div>
+          <span id="home-semester-credits" class="text-lg font-black text-emerald-700">0학점 신청</span>
+        </div>
+      </div>
+      <div id="home-status-banner" class="p-3 rounded-xl text-center text-sm font-bold bg-gray-100 text-gray-500">
+        성적을 입력하면 졸업 진단이 시작됩니다
+      </div>
+      <div class="space-y-2">
+        <h3 class="text-sm font-bold text-gray-800">📅 다가오는 일정</h3>
+        <div class="bg-white rounded-xl border border-gray-100 divide-y divide-gray-50 shadow-sm text-sm">
+          <div class="p-3"><span class="text-red-500 font-bold mr-3">D-3</span>수학 지필고사</div>
+          <div class="p-3"><span class="text-orange-500 font-bold mr-3">D-7</span>영어 수행평가 제출 마감</div>
+          <div class="p-3"><span class="text-blue-500 font-bold mr-3">D-14</span>2학기 수강신청</div>
+        </div>
+      </div>
+      <div class="grid grid-cols-2 gap-3">
+        <button onclick="switchScreen('screen-grade')" class="bg-blue-600 text-white font-bold text-sm py-3 rounded-xl shadow-md hover:bg-blue-700 transition">+ 성적 입력</button>
+        <button onclick="switchScreen('screen-diagnosis')" class="bg-gray-800 text-white font-bold text-sm py-3 rounded-xl shadow-md hover:bg-gray-900 transition">학점 진단</button>
+      </div>
+      <!-- PWA 설치 배너 — 브라우저가 설치 가능 상태일 때만 표시 -->
+      <div id="install-banner" class="hidden items-center justify-between bg-blue-50 border border-blue-200 rounded-xl px-4 py-3 text-sm">
+        <span class="font-semibold text-blue-800">📲 홈화면에 앱 추가하기</span>
+        <button id="install-btn" class="bg-blue-600 text-white text-xs font-bold px-3 py-1.5 rounded-lg">추가</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ───────── 화면 2: 학점 현황 ───────── -->
+  <div id="screen-credit" class="app-screen">
+    <div class="flex items-center px-5 py-3 border-b border-gray-100 bg-white shrink-0">
+      <button onclick="switchScreen('screen-home')" class="text-gray-600 mr-3"><i class="fas fa-arrow-left"></i></button>
+      <span class="text-lg font-bold text-gray-800">학점 현황</span>
+    </div>
+    <div class="flex-1 overflow-y-auto no-scrollbar px-5 py-4 space-y-5">
+      <div class="text-center py-2">
+        <h2 id="credit-total-label" class="text-2xl font-black text-gray-800">0 / 192 학점</h2>
+        <div class="w-full h-5 bg-gray-100 rounded-full overflow-hidden mt-3 shadow-inner">
+          <div id="credit-total-bar" class="h-full bg-blue-500 rounded-full flex items-center justify-end pr-2 text-[10px] text-white font-bold transition-all duration-500" style="width:0%">0%</div>
+        </div>
+      </div>
+      <div class="space-y-3">
+        <h3 class="text-sm font-bold text-gray-800">교과 영역별 취득 현황</h3>
+        <div id="category-bars" class="bg-white border border-gray-100 rounded-2xl p-4 shadow-sm space-y-4 text-xs font-semibold"></div>
+      </div>
+      <button onclick="switchScreen('screen-grade')" class="w-full py-3 border border-gray-200 text-gray-600 rounded-xl font-bold text-sm hover:bg-gray-50 flex justify-between px-4 items-center">
+        <span>성적 입력하러 가기</span><i class="fas fa-chevron-right text-gray-400"></i>
+      </button>
+    </div>
+  </div>
+
+  <!-- ───────── 화면 3: 성적 입력 ───────── -->
+  <div id="screen-grade" class="app-screen">
+    <div class="flex items-center justify-between px-5 py-3 border-b border-gray-100 bg-white shrink-0">
+      <div class="flex items-center">
+        <button onclick="switchScreen('screen-home')" class="text-gray-600 mr-3"><i class="fas fa-arrow-left"></i></button>
+        <span class="text-lg font-bold text-gray-800">성적 입력</span>
+      </div>
+      <span class="text-sm font-semibold text-blue-600 bg-blue-50 px-3 py-1 rounded-full">2학년 1학기</span>
+    </div>
+    <div class="flex-1 overflow-y-auto no-scrollbar px-5 py-4 space-y-4 pb-6">
+
+      <p class="text-xs text-gray-500">📌 <b>출석률(%)</b>과 <b>지필·수행 점수</b>를 입력하면 성취도와 이수 여부가 자동 계산됩니다.</p>
+
+      <!-- 과목 카드 목록 -->
+      <div id="subject-list" class="space-y-4"></div>
+
+      <!-- ── 과목 추가 버튼 ── -->
+      <button id="add-btn" onclick="showAddForm()"
+        class="w-full border-2 border-dashed border-blue-200 text-blue-500 font-bold text-sm py-3 rounded-xl hover:bg-blue-50 transition">
+        <i class="fas fa-plus-circle mr-1"></i> 과목 추가
+      </button>
+
+      <!-- ── 인라인 과목 추가 폼 (기본 숨김) ── -->
+      <div id="add-form-card" class="hidden bg-blue-50 border-2 border-blue-200 rounded-2xl p-4 space-y-3">
+        <p class="font-bold text-blue-800 text-sm"><i class="fas fa-plus-circle mr-1"></i> 새 과목 추가</p>
+
+        <div>
+          <label class="text-xs text-gray-500 font-semibold">과목명 *</label>
+          <input id="af-name" type="text" placeholder="예: 수학 I, 영어 독해와 작문"
+            class="w-full mt-1 border border-gray-200 rounded-lg px-3 py-2 text-sm bg-white focus:border-blue-400 focus:outline-none" />
+        </div>
+
+        <div class="grid grid-cols-2 gap-2">
+          <div>
+            <label class="text-xs text-gray-500 font-semibold">학점 (1~5)</label>
+            <input id="af-credits" type="number" min="1" max="5" value="3"
+              class="w-full mt-1 border border-gray-200 rounded-lg px-3 py-2 text-sm bg-white focus:border-blue-400 focus:outline-none" />
+          </div>
+          <div>
+            <label class="text-xs text-gray-500 font-semibold">출석률 (%)</label>
+            <input id="af-attend" type="number" min="0" max="100" step="0.1" value="95"
+              class="w-full mt-1 border border-gray-200 rounded-lg px-3 py-2 text-sm bg-white focus:border-blue-400 focus:outline-none" />
+          </div>
+        </div>
+
+        <div>
+          <label class="text-xs text-gray-500 font-semibold">교과 영역</label>
+          <select id="af-category"
+            class="w-full mt-1 border border-gray-200 rounded-lg px-3 py-2 text-sm bg-white focus:border-blue-400 focus:outline-none">
+            <option value="common">공통과목 — 국어·수학·영어·한국사 등</option>
+            <option value="general" selected>일반선택 — 수학I·영어독해·물리학I 등</option>
+            <option value="career">진로선택 — 심화수학·경제·물리학II 등</option>
+            <option value="convergence">융합선택 — 융합과학탐구·사회문제탐구 등</option>
+            <option value="pe_arts">체육·예술 — 체육·음악·미술 등</option>
+            <option value="culture">교양 — 철학·논리학·환경 등</option>
+          </select>
+        </div>
+
+        <div class="grid grid-cols-2 gap-2 pt-1">
+          <button onclick="hideAddForm()"
+            class="py-2.5 border border-gray-300 text-gray-600 rounded-xl text-sm font-bold hover:bg-gray-50 transition">취소</button>
+          <button onclick="confirmAddSubject()"
+            class="py-2.5 bg-blue-600 text-white rounded-xl text-sm font-bold hover:bg-blue-700 transition">추가하기</button>
+        </div>
+      </div>
+
+      <!-- 저장 버튼 -->
+      <button onclick="saveAndGoHome()" class="w-full bg-blue-600 text-white font-bold py-3.5 rounded-xl shadow-lg hover:bg-blue-700 transition">저장하기</button>
+    </div>
+  </div>
+
+  <!-- ───────── 화면 4: 졸업 진단 ───────── -->
+  <div id="screen-diagnosis" class="app-screen">
+    <div class="flex items-center px-5 py-3 border-b border-gray-100 bg-white shrink-0">
+      <button onclick="switchScreen('screen-home')" class="text-gray-600 mr-3"><i class="fas fa-arrow-left"></i></button>
+      <span class="text-lg font-bold text-gray-800">졸업 진단 결과</span>
+    </div>
+    <div class="flex-1 overflow-y-auto no-scrollbar px-5 py-4 space-y-5">
+      <div id="diag-banner" class="p-4 rounded-xl text-center">
+        <span id="diag-banner-text" class="font-extrabold text-base flex items-center justify-center"></span>
+        <p id="diag-banner-sub" class="text-xs font-medium mt-1"></p>
+      </div>
+      <div class="space-y-2">
+        <h3 class="text-sm font-bold text-gray-800">체크리스트</h3>
+        <div id="diag-checklist" class="bg-white border border-gray-100 rounded-2xl p-4 shadow-sm text-sm font-medium space-y-3"></div>
+      </div>
+      <div class="space-y-2">
+        <h3 class="text-sm font-bold text-gray-800">부족 분석</h3>
+        <div id="diag-analysis" class="bg-gray-50 rounded-2xl p-4 text-xs font-semibold text-gray-600 space-y-2"></div>
+      </div>
+      <div class="grid grid-cols-2 gap-3">
+        <button onclick="switchScreen('screen-warning')" class="py-3 bg-red-100 text-red-700 rounded-xl font-bold text-sm hover:bg-red-200 transition">미이수 보기</button>
+        <button onclick="switchScreen('screen-verify')" class="py-3 bg-blue-50 text-blue-700 rounded-xl font-bold text-sm hover:bg-blue-100 transition">🔬 규칙 검증</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ───────── 화면 5: 미이수 경고 ───────── -->
+  <div id="screen-warning" class="app-screen">
+    <div class="flex items-center px-5 py-3 border-b border-gray-100 bg-white shrink-0">
+      <button onclick="switchScreen('screen-home')" class="text-gray-600 mr-3"><i class="fas fa-arrow-left"></i></button>
+      <span class="text-lg font-bold text-gray-800">미이수 위험 경고</span>
+    </div>
+    <div class="flex-1 overflow-y-auto no-scrollbar px-5 py-4 space-y-4">
+      <div id="warning-count-label" class="text-sm font-bold text-red-600 py-1"></div>
+      <div id="warning-list" class="space-y-4"></div>
+      <div class="bg-gray-50 rounded-xl p-4 text-[11px] text-gray-500 leading-relaxed">
+        <i class="fas fa-info-circle mr-1 text-gray-400"></i>
+        미이수 시 방학 중 보충이수 프로그램 대상이 되며, 보충수업 미완료 시 졸업이 유예(유급)될 위험이 있습니다.
+      </div>
+    </div>
+  </div>
+
+  <!-- ───────── 화면 6: 경계값 자동 검증 ───────── -->
+  <div id="screen-verify" class="app-screen">
+    <div class="flex items-center px-5 py-3 border-b border-gray-100 bg-white shrink-0">
+      <button onclick="switchScreen('screen-diagnosis')" class="text-gray-600 mr-3"><i class="fas fa-arrow-left"></i></button>
+      <span class="text-lg font-bold text-gray-800">🔬 계산 규칙 자동 검증</span>
+    </div>
+    <div class="flex-1 overflow-y-auto no-scrollbar px-5 py-4 space-y-4">
+      <p class="text-xs text-gray-500 leading-relaxed">
+        아래 버튼을 누르면 고교학점제 핵심 계산 규칙의 <b>경계값</b>이 올바르게 작동하는지 자동으로 테스트합니다.<br>
+        모든 항목이 <span class="text-green-600 font-bold">✅ PASS</span>여야 합니다.
+      </p>
+      <button onclick="runVerification()" class="w-full bg-indigo-600 text-white font-bold py-3 rounded-xl shadow hover:bg-indigo-700 transition">
+        <i class="fas fa-play-circle mr-2"></i>경계값 자동 검증 실행
+      </button>
+      <div id="verify-results" class="space-y-2"></div>
+      <div id="verify-summary" class="hidden p-4 rounded-xl text-center font-extrabold text-base"></div>
+    </div>
+  </div>
+
+  <!-- ───────── 하단 탭 ───────── -->
+  <div class="h-20 bg-white border-t border-gray-100 flex justify-around items-center px-2 z-10 shrink-0" style="padding-bottom: max(16px, env(safe-area-inset-bottom, 16px))">
+    <button onclick="switchScreen('screen-home')" data-screen="screen-home" class="nav-btn flex flex-col items-center text-blue-600">
+      <i class="fas fa-home text-lg mb-1"></i><span class="text-[10px] font-bold">홈</span>
+    </button>
+    <button onclick="switchScreen('screen-credit')" data-screen="screen-credit" class="nav-btn flex flex-col items-center text-gray-400 hover:text-gray-600">
+      <i class="fas fa-graduation-cap text-lg mb-1"></i><span class="text-[10px] font-medium">학점현황</span>
+    </button>
+    <button onclick="switchScreen('screen-grade')" data-screen="screen-grade" class="nav-btn flex flex-col items-center text-gray-400 hover:text-gray-600">
+      <i class="fas fa-edit text-lg mb-1"></i><span class="text-[10px] font-medium">성적입력</span>
+    </button>
+    <button onclick="switchScreen('screen-diagnosis')" data-screen="screen-diagnosis" class="nav-btn flex flex-col items-center text-gray-400 hover:text-gray-600">
+      <i class="fas fa-heartbeat text-lg mb-1"></i><span class="text-[10px] font-medium">학점진단</span>
+    </button>
+  </div>
+</div>
+
+<script>
+// ═══════════════════════════════════════════════════════════
+//  계산 규칙 상수
+// ═══════════════════════════════════════════════════════════
+const RULES = {
+  GRADUATION: 192,
+  MIN_ATTENDANCE: 2 / 3,   // ≈ 66.7%
+  MIN_ACHIEVEMENT: 40,
+  MIN_SEMESTER: 28,
+  GRADE_A: 90, GRADE_B: 80, GRADE_C: 70, GRADE_D: 60, GRADE_E: 40,
+  CATEGORY_TARGETS: {
+    common:45, general:40, career:30, convergence:30, pe_arts:20, culture:9,
+  },
+  CATEGORY_LABELS: {
+    common:'공통과목', general:'일반선택', career:'진로선택',
+    convergence:'융합선택', pe_arts:'체육·예술', culture:'교양',
+  },
+};
+
+// ═══════════════════════════════════════════════════════════
+//  핵심 계산 함수
+// ═══════════════════════════════════════════════════════════
+
+function toGrade(rate) {
+  if (rate >= RULES.GRADE_A) return 'A';
+  if (rate >= RULES.GRADE_B) return 'B';
+  if (rate >= RULES.GRADE_C) return 'C';
+  if (rate >= RULES.GRADE_D) return 'D';
+  if (rate >= RULES.GRADE_E) return 'E';
+  return 'I';
+}
+
+// [조치 2] attendancePct(%) 하나로 출석 판정
+function calcSubject(s) {
+  const attendRate = (s.attendancePct ?? 100) / 100;
+  const achRate    = s.writtenScore + s.performanceScore;
+  const grade      = toGrade(achRate);
+  const attendOk   = attendRate >= RULES.MIN_ATTENDANCE;
+  const achOk      = achRate    >= RULES.MIN_ACHIEVEMENT;
+  const passed     = attendOk && achOk;
+
+  const warningType =
+    !attendOk && !achOk ? 'both'
+    : !attendOk         ? 'attendance'
+    : !achOk            ? 'achievement'
+    : 'none';
+
+  const needMore       = achOk ? 0 : Math.ceil(RULES.MIN_ACHIEVEMENT - achRate);
+  const attendShortfall = attendOk ? 0 :
+    parseFloat(((RULES.MIN_ATTENDANCE * 100) - (s.attendancePct ?? 100)).toFixed(1));
+
+  return { ...s, attendRate, achRate, grade, passed, warningType, needMore, attendShortfall };
+}
+
+function calcDiagnosis(subjects) {
+  const results  = subjects.map(calcSubject);
+  const passed   = results.filter(r => r.passed);
+  const warnings = results.filter(r => r.warningType !== 'none');
+  const earned   = passed.reduce((s, r) => s + r.credits, 0);
+  const remaining = Math.max(0, RULES.GRADUATION - earned);
+  const progress  = Math.min(100, (earned / RULES.GRADUATION) * 100);
+
+  const byCategory = {};
+  for (const cat of Object.keys(RULES.CATEGORY_TARGETS)) {
+    const target    = RULES.CATEGORY_TARGETS[cat];
+    const catEarned = passed.filter(r => r.category === cat).reduce((s, r) => s + r.credits, 0);
+    byCategory[cat] = { earned: catEarned, target, pct: Math.min(100, (catEarned / target) * 100) };
+  }
+
+  const semesterCredits = subjects.reduce((s, r) => s + r.credits, 0);
+  const remainSemesters = 4; // 2학년 1학기 기준 고정값
+  const perSemester = remainSemesters > 0 ? Math.ceil(remaining / remainSemesters) : 0;
+
+  let status, bannerMsg, bannerSub;
+  if (warnings.length === 0 && remaining === 0) {
+    status = 'safe';    bannerMsg = '✅ 졸업 요건 달성!';    bannerSub = '모든 요건을 충족했습니다.';
+  } else if (warnings.length >= 3 || perSemester > 40) {
+    status = 'danger';  bannerMsg = '🔴 즉각 조치 필요';     bannerSub = '담임 교사와 상담하세요.';
+  } else {
+    status = 'warning'; bannerMsg = '⚡ 주의 필요';          bannerSub = '미이수 과목 해결이 필요해요.';
+  }
+
+  return { results, passed, warnings, earned, remaining, progress, byCategory,
+           remainSemesters, perSemester, semesterCredits, status, bannerMsg, bannerSub };
+}
+
+// ═══════════════════════════════════════════════════════════
+//  앱 상태 & 스토리지
+// ═══════════════════════════════════════════════════════════
+const STORAGE_KEY = 'hc_subjects_v2'; // v2: attendancePct 모델
+
+let subjects = loadSubjects();
+
+function loadSubjects() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    return raw ? JSON.parse(raw) : getDefaultSubjects();
+  } catch { return getDefaultSubjects(); }
+}
+
+function saveSubjects() {
+  try { localStorage.setItem(STORAGE_KEY, JSON.stringify(subjects)); } catch(e) { console.error(e); }
+}
+
+// [조치 2] 샘플 데이터: totalClasses/attendedClasses → attendancePct
+function getDefaultSubjects() {
+  return [
+    { id:'s1', name:'수학 I',          credits:4, category:'general',  attendancePct:95,   writtenScore:70, performanceScore:25, isWrittenExempt:false },
+    { id:'s2', name:'영어 독해와 작문', credits:3, category:'general',  attendancePct:80,   writtenScore:30, performanceScore:8,  isWrittenExempt:false },
+    { id:'s3', name:'물리학 I',         credits:3, category:'career',   attendancePct:62,   writtenScore:70, performanceScore:20, isWrittenExempt:false },
+    { id:'s4', name:'한국사',           credits:2, category:'common',   attendancePct:93,   writtenScore:42, performanceScore:10, isWrittenExempt:false },
+    { id:'s5', name:'체육',             credits:2, category:'pe_arts',  attendancePct:97,   writtenScore:0,  performanceScore:88, isWrittenExempt:true  },
+  ];
+}
+
+function genId() { return 's' + Date.now() + Math.random().toString(36).slice(2,6); }
+
+// ═══════════════════════════════════════════════════════════
+//  UI 전체 동기화
+// ═══════════════════════════════════════════════════════════
+function updateAll() {
+  const d = calcDiagnosis(subjects);
+  updateHome(d);
+  updateCreditScreen(d);
+  updateDiagnosisScreen(d);
+  updateWarningScreen(d);
+  renderSubjectList();
+}
+
+function updateHome(d) {
+  document.getElementById('home-credit-label').textContent = `${d.earned} / 192 학점`;
+  document.getElementById('home-progress-bar').style.width = `${d.progress.toFixed(1)}%`;
+  document.getElementById('home-remaining').textContent    = d.remaining;
+  document.getElementById('home-semester-credits').textContent = `${d.semesterCredits}학점 신청`;
+
+  const wCard  = document.getElementById('home-warning-card');
+  const wCount = document.getElementById('home-warning-count');
+  if (d.warnings.length > 0) {
+    wCard.className  = 'cursor-pointer p-4 rounded-xl border flex flex-col justify-between transition bg-red-50 border-red-200 text-red-700';
+    wCount.textContent = `${d.warnings.length}과목 위험`;
+  } else {
+    wCard.className  = 'cursor-pointer p-4 rounded-xl border flex flex-col justify-between transition bg-emerald-50 border-emerald-200 text-emerald-700';
+    wCount.textContent = '0과목 (안전)';
+  }
+
+  const banner = document.getElementById('home-status-banner');
+  const statusMap = {
+    safe:    { cls:'bg-emerald-100 text-emerald-700', txt:`졸업 가능 ✅  (취득 ${d.earned}/192학점)` },
+    warning: { cls:'bg-orange-100 text-orange-700',   txt:`주의 ⚡  (취득 ${d.earned}/192학점, 미이수 ${d.warnings.length}과목)` },
+    danger:  { cls:'bg-red-100 text-red-700',         txt:`위험 🔴  즉각 조치 필요 (미이수 ${d.warnings.length}과목)` },
+  };
+  const sm = statusMap[d.status];
+  banner.className  = `p-3 rounded-xl text-center text-sm font-bold ${sm.cls}`;
+  banner.textContent = sm.txt;
+}
+
+function updateCreditScreen(d) {
+  const pct = d.progress.toFixed(1);
+  document.getElementById('credit-total-label').textContent = `${d.earned} / 192 학점`;
+  const bar = document.getElementById('credit-total-bar');
+  bar.style.width = `${pct}%`;
+  bar.textContent = `${pct}%`;
+
+  const colorMap  = p => p >= 100 ? 'bg-emerald-500' : p >= 60 ? 'bg-blue-500' : 'bg-orange-400';
+  const labelClr  = p => p >= 100 ? 'text-emerald-600' : p >= 60 ? 'text-blue-600' : 'text-orange-500';
+  const container = document.getElementById('category-bars');
+  container.innerHTML = '';
+  for (const cat of Object.keys(RULES.CATEGORY_LABELS)) {
+    const { earned, target, pct: cp } = d.byCategory[cat];
+    container.innerHTML += `
+      <div>
+        <div class="flex justify-between mb-1">
+          <span>${RULES.CATEGORY_LABELS[cat]}</span>
+          <span class="${labelClr(cp)}">${earned}/${target}${cp >= 100 ? ' (완료)' : ''}</span>
+        </div>
+        <div class="w-full h-2.5 bg-gray-100 rounded-full">
+          <div class="h-full ${colorMap(cp)} rounded-full transition-all duration-500" style="width:${cp.toFixed(1)}%"></div>
+        </div>
+      </div>`;
+  }
+}
+
+function updateDiagnosisScreen(d) {
+  const bannerMap = {
+    safe:   'bg-emerald-50 border border-emerald-200',
+    warning:'bg-orange-50 border border-orange-200',
+    danger: 'bg-red-50 border border-red-200',
+  };
+  const subClr = { safe:'text-emerald-600', warning:'text-orange-600', danger:'text-red-600' };
+  document.getElementById('diag-banner').className        = `p-4 rounded-xl text-center ${bannerMap[d.status]}`;
+  document.getElementById('diag-banner-text').className   = `font-extrabold text-base flex items-center justify-center ${subClr[d.status]}`;
+  document.getElementById('diag-banner-text').textContent = d.bannerMsg;
+  document.getElementById('diag-banner-sub').className    = `text-xs font-medium mt-1 ${subClr[d.status]}`;
+  document.getElementById('diag-banner-sub').textContent  = d.bannerSub;
+
+  const item = (ok, label, val) => `
+    <div class="flex justify-between">
+      <span class="text-gray-700"><i class="fas fa-${ok ? 'check-circle text-emerald-500' : 'times-circle text-red-500'} mr-2"></i>${label}</span>
+      <span class="${ok ? 'text-emerald-600' : 'text-red-600'} font-bold">${val}</span>
+    </div>`;
+  document.getElementById('diag-checklist').innerHTML =
+    item(d.byCategory.common.earned >= RULES.CATEGORY_TARGETS.common, '공통필수 과목 이수',
+         d.byCategory.common.earned >= RULES.CATEGORY_TARGETS.common ? '완료' : `${d.byCategory.common.earned}/${RULES.CATEGORY_TARGETS.common}학점`) +
+    item(d.earned >= RULES.GRADUATION, '총 이수 학점', `${d.earned}/192`) +
+    `<div class="flex justify-between cursor-pointer" onclick="switchScreen('screen-warning')">
+       <span class="text-gray-700"><i class="fas fa-${d.warnings.length === 0 ? 'check-circle text-emerald-500' : 'times-circle text-red-500'} mr-2"></i>미이수 과목</span>
+       <span class="${d.warnings.length === 0 ? 'text-emerald-600' : 'text-red-600'} font-bold">${d.warnings.length === 0 ? '없음 ✅' : d.warnings.length + '과목 존재'}</span>
+     </div>` +
+    item(d.semesterCredits >= RULES.MIN_SEMESTER, '학기 최소 학점(28)',
+         d.semesterCredits >= RULES.MIN_SEMESTER ? '충족' : `${d.semesterCredits}학점 (부족)`);
+
+  document.getElementById('diag-analysis').innerHTML = `
+    <div class="flex justify-between"><span>취득 / 목표 학점</span><span class="text-gray-800 font-bold">${d.earned} / 192</span></div>
+    <div class="flex justify-between"><span>남은 학점 / 남은 학기</span><span class="text-gray-800 font-bold">${d.remaining}학점 / ${d.remainSemesters}학기</span></div>
+    <div class="flex justify-between"><span>학기당 최소 필요</span><span class="text-blue-600 font-bold">약 ${d.perSemester}학점 이상</span></div>
+    <div class="text-[11px] text-gray-400 border-t border-gray-200 pt-2 mt-1">
+      ${d.remaining === 0 ? '🎉 졸업 학점을 이미 달성했습니다!' : `현재 학기 ${d.semesterCredits}학점 기준으로 진행 중입니다.`}
+    </div>`;
+}
+
+function updateWarningScreen(d) {
+  const label = document.getElementById('warning-count-label');
+  const list  = document.getElementById('warning-list');
+
+  if (d.warnings.length === 0) {
+    label.textContent = '✅ 미이수 위험 과목이 없습니다.';
+    label.className   = 'text-sm font-bold text-emerald-600 py-1';
+    list.innerHTML    = '<div class="text-center text-gray-400 py-8">모든 과목이 이수 요건을 충족하고 있습니다. 👍</div>';
+    return;
+  }
+  label.textContent = `⚠️ 현재 ${d.warnings.length}과목이 미이수 위험 상태입니다.`;
+  label.className   = 'text-sm font-bold text-red-600 py-1';
+
+  list.innerHTML = d.warnings.map(r => {
+    const isAch  = r.warningType === 'achievement' || r.warningType === 'both';
+    const isAt   = r.warningType === 'attendance'  || r.warningType === 'both';
+    const border = isAch ? 'border-red-200' : 'border-orange-200';
+    const icon   = isAch ? '🔴' : '🟡';
+    const atPct  = (r.attendancePct ?? 100).toFixed(1);
+
+    let body = '';
+    if (isAch) {
+      body += `
+        <div class="space-y-1">
+          <div class="flex justify-between text-xs font-semibold text-gray-600">
+            <span>현재 성취율 ${r.achRate}점</span><span class="text-red-500 font-bold">기준 40점</span>
+          </div>
+          <div class="w-full h-2 bg-gray-100 rounded-full relative">
+            <div class="h-full bg-red-500 rounded-full" style="width:${Math.min(100,r.achRate)}%"></div>
+            <div class="threshold-line" style="left:40%"></div>
+          </div>
+          <p class="text-xs text-red-600 font-bold">⚠️ 이수까지 최소 ${r.needMore}점 더 필요합니다.</p>
+        </div>`;
+    }
+    if (isAt) {
+      body += `
+        <div class="space-y-1 mt-2">
+          <div class="flex justify-between text-xs font-semibold text-gray-600">
+            <span>현재 출석률 ${atPct}%</span><span class="text-orange-500 font-bold">기준 66.7%</span>
+          </div>
+          <div class="w-full h-2 bg-gray-100 rounded-full relative">
+            <div class="h-full bg-orange-400 rounded-full" style="width:${Math.min(100,parseFloat(atPct))}%"></div>
+            <div class="threshold-line-orange" style="left:66.7%"></div>
+          </div>
+          <p class="text-xs text-orange-600 font-bold">⚠️ 출석률이 기준(66.7%)보다 ${r.attendShortfall}% 낮습니다. 담임 선생님께 확인하세요.</p>
+        </div>`;
+    }
+
+    return `
+      <div class="bg-white border ${border} rounded-2xl p-4 shadow-sm space-y-3">
+        <div class="flex justify-between items-center">
+          <span class="font-bold text-gray-800 text-sm">${icon} ${r.name}</span>
+          <span class="text-xs font-bold text-gray-500">${r.credits}학점</span>
+        </div>
+        ${body}
+        <button onclick="switchScreen('screen-grade')" class="w-full py-2 bg-gray-50 text-gray-700 rounded-lg text-xs font-bold hover:bg-gray-100 transition">성적 수정하기</button>
+      </div>`;
+  }).join('');
+}
+
+// ═══════════════════════════════════════════════════════════
+//  성적 입력 화면 — 과목 카드 렌더링
+// ═══════════════════════════════════════════════════════════
+function renderSubjectList() {
+  const container = document.getElementById('subject-list');
+
+  // [조치 5] 빈 상태 안내
+  if (subjects.length === 0) {
+    container.innerHTML = `
+      <div class="text-center py-10 text-gray-400">
+        <i class="fas fa-book-open text-3xl mb-3"></i>
+        <p class="font-bold text-sm text-gray-500 mt-2">아직 입력된 과목이 없어요</p>
+        <p class="text-xs mt-1">아래 "과목 추가" 버튼으로 이번 학기 과목을 등록해주세요.</p>
+      </div>`;
+    return;
+  }
+
+  container.innerHTML = subjects.map(s => {
+    const r        = calcSubject(s);
+    const isWarn   = r.warningType !== 'none';
+    const cardCls  = isWarn ? 'card-fail border-2' : 'border-2 border-gray-100';
+    const gradeCls = r.grade === 'I' ? 'badge-fail' : 'badge-pass';
+    const achClr   = r.grade === 'I' ? 'text-red-600' : 'text-emerald-600';
+    const passCls  = r.passed ? 'text-emerald-600' : 'text-red-600';
+    const passLbl  = r.passed ? '✅ 이수' : '⚠️ 미이수 위험';
+    // [조치 2] 출석률 입력 칸 색상
+    const atCls    = r.attendRate < RULES.MIN_ATTENDANCE ? 'input-warn' : '';
+    const atSubLbl = r.attendRate >= RULES.MIN_ATTENDANCE
+      ? `<span class="text-[10px] text-gray-400 mt-0.5">기준 충족 ✅</span>`
+      : `<span class="text-[10px] text-red-500 mt-0.5">기준 미달 ⚠️</span>`;
+
+    return `
+    <div class="bg-white ${cardCls} rounded-2xl p-4 shadow-sm space-y-3">
+      <div class="flex justify-between items-center">
+        <span class="font-bold text-gray-800 text-base">${s.name}</span>
+        <span class="text-xs bg-gray-100 px-2 py-0.5 rounded text-gray-600 font-bold">${s.credits}학점</span>
+      </div>
+      <div class="grid grid-cols-3 gap-2 text-xs">
+
+        <!-- [조치 2] 출석률 % 단일 입력 -->
+        <div class="flex flex-col">
+          <label class="text-gray-400 mb-0.5">출석률 (%)</label>
+          <div class="flex items-center gap-1">
+            <input type="number" min="0" max="100" step="0.1" value="${s.attendancePct ?? 100}"
+              class="w-14 border rounded px-1 py-0.5 text-center text-xs ${atCls}"
+              onchange="updateField('${s.id}','attendancePct',+this.value)" />
+            <span class="text-gray-400">%</span>
+          </div>
+          ${atSubLbl}
+        </div>
+
+        <div class="flex flex-col">
+          <label class="text-gray-400 mb-0.5">지필 점수</label>
+          <input type="number" min="0" max="100" value="${s.writtenScore}"
+            class="border rounded px-1 py-0.5 text-center text-xs"
+            onchange="updateField('${s.id}','writtenScore',+this.value)" />
+          ${s.isWrittenExempt ? '<span class="text-[10px] text-gray-400 mt-0.5">(지필없음)</span>' : ''}
+        </div>
+
+        <div class="flex flex-col">
+          <label class="text-gray-400 mb-0.5">수행 점수</label>
+          <input type="number" min="0" max="100" value="${s.performanceScore}"
+            class="border rounded px-1 py-0.5 text-center text-xs"
+            onchange="updateField('${s.id}','performanceScore',+this.value)" />
+        </div>
+      </div>
+
+      <div class="border-t border-gray-100 pt-2 flex justify-between items-center text-xs font-bold">
+        <span class="${achClr}">성취율 ${r.achRate}점 → <span class="grade-badge ${gradeCls}">${r.grade === 'I' ? 'I ⚠️' : r.grade}</span></span>
+        <span class="${passCls}">${passLbl}</span>
+      </div>
+      <button onclick="removeSubject('${s.id}')" class="text-[10px] text-gray-300 hover:text-red-400 transition">삭제</button>
+    </div>`;
+  }).join('');
+}
+
+function updateField(id, field, value) {
+  const s = subjects.find(s => s.id === id);
+  if (!s) return;
+  s[field] = value;
+  saveSubjects();
+  updateAll();
+}
+
+// ═══════════════════════════════════════════════════════════
+//  [조치 1] 인라인 과목 추가 폼
+// ═══════════════════════════════════════════════════════════
+function showAddForm() {
+  document.getElementById('add-form-card').classList.remove('hidden');
+  document.getElementById('add-btn').classList.add('hidden');
+  setTimeout(() => document.getElementById('af-name').focus(), 50);
+}
+
+function hideAddForm() {
+  document.getElementById('add-form-card').classList.add('hidden');
+  document.getElementById('add-btn').classList.remove('hidden');
+  document.getElementById('af-name').value        = '';
+  document.getElementById('af-name').style.borderColor = '';
+  document.getElementById('af-credits').value     = '3';
+  document.getElementById('af-attend').value      = '95';
+  document.getElementById('af-category').value    = 'general';
+}
+
+function confirmAddSubject() {
+  const nameEl = document.getElementById('af-name');
+  const name   = nameEl.value.trim();
+  if (!name) {
+    nameEl.style.borderColor = '#ef4444';
+    nameEl.focus();
+    return;
+  }
+  const credits      = Math.min(5, Math.max(1, parseInt(document.getElementById('af-credits').value, 10) || 3));
+  const attendancePct = Math.min(100, Math.max(0, parseFloat(document.getElementById('af-attend').value) || 95));
+  const category     = document.getElementById('af-category').value;
+
+  subjects.push({
+    id: genId(), name, credits, category,
+    grade: 2, semester: 1,
+    attendancePct,
+    writtenScore: 0, performanceScore: 0,
+    isWrittenExempt: category === 'pe_arts',
+  });
+  saveSubjects();
+  hideAddForm();
+  updateAll();
+  showToast(`"${name}" 과목이 추가됐습니다.`);
+}
+
+function removeSubject(id) {
+  const s = subjects.find(s => s.id === id);
+  if (!s) return;
+  if (!confirm(`"${s.name}" 과목을 삭제하시겠습니까?`)) return;
+  subjects = subjects.filter(s => s.id !== id);
+  saveSubjects();
+  updateAll();
+  showToast('과목이 삭제됐습니다.');
+}
+
+function saveAndGoHome() {
+  saveSubjects();
+  switchScreen('screen-home');
+  showToast('저장 완료!');
+}
+
+function showToast(msg) {
+  const t = document.createElement('div');
+  t.textContent = msg;
+  t.className = 'fixed bottom-8 left-1/2 -translate-x-1/2 bg-gray-800 text-white text-sm font-bold px-5 py-2 rounded-full shadow-lg z-50';
+  document.body.appendChild(t);
+  setTimeout(() => { t.style.opacity = '0'; t.style.transition = 'opacity 0.4s'; setTimeout(() => t.remove(), 400); }, 1500);
+}
+
+// ═══════════════════════════════════════════════════════════
+//  경계값 자동 검증 (attendancePct 모델 기준)
+// ═══════════════════════════════════════════════════════════
+function runVerification() {
+  const container = document.getElementById('verify-results');
+  const summary   = document.getElementById('verify-summary');
+  container.innerHTML = '';
+  summary.className = 'hidden';
+
+  // 테스트용 과목 헬퍼
+  const sub = (attendancePct, writtenScore, performanceScore, credits = 3) => ({
+    id:'t', name:'테스트', credits, category:'general',
+    attendancePct, writtenScore, performanceScore, isWrittenExempt: false,
+  });
+
+  const tests = [
+    {
+      label: '성취율 39점 → 성취도 I (미이수)',
+      run: () => { const r = calcSubject(sub(90, 20, 19)); return r.grade === 'I' && !r.passed; },
+      expect: 'grade=I, passed=false',
+    },
+    {
+      label: '성취율 40점 → 성취도 E (이수) — 경계값',
+      run: () => { const r = calcSubject(sub(90, 20, 20)); return r.grade === 'E' && r.passed; },
+      expect: 'grade=E, passed=true',
+    },
+    {
+      label: '출석률 64.4% → 미이수 (기준 66.7%)',
+      run: () => { const r = calcSubject(sub(64.4, 50, 30)); return !r.passed && (r.warningType === 'attendance' || r.warningType === 'both'); },
+      expect: 'attendancePct=64.4, passed=false',
+    },
+    {
+      label: '출석률 66.7% → 이수 — 경계값',
+      run: () => { const r = calcSubject(sub(66.7, 50, 30)); return r.passed; },
+      expect: 'attendancePct=66.7, passed=true',
+    },
+    {
+      label: '출석 정상 + 성취율 35점 → 미이수 (achievement)',
+      run: () => { const r = calcSubject(sub(90, 15, 20)); return !r.passed && r.warningType === 'achievement'; },
+      expect: 'passed=false, warningType=achievement',
+    },
+    {
+      label: '성취율 정상 + 출석 50% → 미이수 (attendance)',
+      run: () => { const r = calcSubject(sub(50, 50, 30)); return !r.passed && r.warningType === 'attendance'; },
+      expect: 'passed=false, warningType=attendance',
+    },
+    {
+      label: '누적 취득 학점 191 → 졸업 요건 미달',
+      run: () => {
+        const d = calcDiagnosis([{ id:'x1', name:'과목', credits:191, category:'general', attendancePct:90, writtenScore:50, performanceScore:30, isWrittenExempt:false }]);
+        return d.earned === 191 && d.remaining === 1;
+      },
+      expect: 'earned=191, remaining=1',
+    },
+    {
+      label: '누적 취득 학점 192 → 졸업 가능 — 경계값',
+      run: () => {
+        const d = calcDiagnosis([{ id:'x1', name:'과목', credits:192, category:'general', attendancePct:90, writtenScore:50, performanceScore:30, isWrittenExempt:false }]);
+        return d.earned === 192 && d.remaining === 0;
+      },
+      expect: 'earned=192, remaining=0',
+    },
+    {
+      label: '성취도 등급 경계: 89점=B, 90점=A',
+      run: () => toGrade(89) === 'B' && toGrade(90) === 'A',
+      expect: 'grade(89)=B, grade(90)=A',
+    },
+    {
+      label: '출석+성취율 모두 미달 → warningType=both',
+      run: () => { const r = calcSubject(sub(44, 10, 10)); return r.warningType === 'both' && !r.passed; },
+      expect: 'warningType=both, passed=false',
+    },
+  ];
+
+  let passCount = 0;
+  tests.forEach((test, i) => {
+    let result = false;
+    try { result = test.run(); } catch(e) { result = false; }
+    if (result) passCount++;
+    container.innerHTML += `
+      <div class="p-3 rounded-lg text-xs font-semibold ${result ? 'vtest-pass' : 'vtest-fail'}">
+        <div class="flex justify-between items-start gap-2">
+          <span class="flex-1">${i+1}. ${test.label}</span>
+          <span class="shrink-0 font-black text-sm">${result ? '✅ PASS' : '❌ FAIL'}</span>
+        </div>
+        <div class="mt-1 text-gray-500">기대값: ${test.expect}</div>
+      </div>`;
+  });
+
+  const allPass = passCount === tests.length;
+  summary.className = `p-4 rounded-xl text-center font-extrabold text-base ${allPass ? 'bg-emerald-100 text-emerald-800' : 'bg-red-100 text-red-800'}`;
+  summary.textContent = allPass
+    ? `✅ 전체 ${tests.length}개 테스트 모두 통과!`
+    : `⚠️ ${tests.length}개 중 ${passCount}개 통과 / ${tests.length - passCount}개 실패`;
+}
+
+// ═══════════════════════════════════════════════════════════
+//  화면 전환 & 네비게이션
+// ═══════════════════════════════════════════════════════════
+function switchScreen(id) {
+  document.querySelectorAll('.app-screen').forEach(el => el.classList.remove('active'));
+  document.getElementById(id).classList.add('active');
+  updateAll();
+
+  document.querySelectorAll('.nav-btn').forEach(btn => {
+    const active = btn.dataset.screen === id;
+    btn.classList.toggle('text-blue-600', active);
+    btn.classList.toggle('text-gray-400', !active);
+    const span = btn.querySelector('span');
+    if (span) span.className = `text-[10px] ${active ? 'font-bold' : 'font-medium'}`;
+  });
+}
+
+// ═══════════════════════════════════════════════════════════
+//  [조치 4] 브라우저 뒤로가기 → 홈으로 (앱 종료 방지)
+// ═══════════════════════════════════════════════════════════
+history.pushState({ screen: 'screen-home' }, '');
+window.addEventListener('popstate', () => {
+  history.pushState({ screen: 'screen-home' }, '');
+  switchScreen('screen-home');
+});
+
+// ═══════════════════════════════════════════════════════════
+//  초기 실행
+// ═══════════════════════════════════════════════════════════
+updateAll();
+
+// ═══════════════════════════════════════════════════════════
+//  PWA: 서비스워커 등록 + 홈화면 설치 배너
+// ═══════════════════════════════════════════════════════════
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('./sw.js').catch(() => {});
+  });
+}
+
+let _installPrompt = null;
+window.addEventListener('beforeinstallprompt', e => {
+  e.preventDefault();
+  _installPrompt = e;
+  const banner = document.getElementById('install-banner');
+  if (banner) banner.classList.replace('hidden', 'flex');
+});
+
+document.getElementById('install-btn').addEventListener('click', async () => {
+  if (!_installPrompt) return;
+  _installPrompt.prompt();
+  const { outcome } = await _installPrompt.userChoice;
+  _installPrompt = null;
+  const banner = document.getElementById('install-banner');
+  if (banner) banner.classList.replace('flex', 'hidden');
+});
+
+window.addEventListener('appinstalled', () => {
+  const banner = document.getElementById('install-banner');
+  if (banner) banner.classList.replace('flex', 'hidden');
+});
+</script>
+</body>
+</html>
