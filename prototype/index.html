@@ -338,6 +338,34 @@
         하단 공유 버튼(<span class="font-mono">⬆</span>) 누른 뒤<br>
         <b>"홈 화면에 추가"</b> 선택
       </div>
+
+      <!-- 초기화 -->
+      <div class="border-t border-gray-100 pt-4 mt-2">
+        <p class="text-xs text-gray-400 text-center mb-3">앱 데이터 전체 삭제</p>
+        <button onclick="showResetConfirm()"
+          class="w-full border border-red-200 text-red-500 font-bold py-3 rounded-xl text-sm hover:bg-red-50 transition">
+          🗑 모든 데이터 초기화
+        </button>
+      </div>
+
+      <!-- 초기화 확인 패널 (기본 숨김) -->
+      <div id="reset-confirm" class="hidden bg-red-50 border-2 border-red-300 rounded-2xl p-4 space-y-3">
+        <p class="text-sm font-extrabold text-red-700">⚠️ 정말 초기화하시겠어요?</p>
+        <p class="text-xs text-red-600 leading-relaxed">
+          이름·학년·학기 설정과 <b>입력한 과목·성적이 모두 삭제</b>됩니다.<br>
+          삭제된 데이터는 복구할 수 없습니다.
+        </p>
+        <div class="grid grid-cols-2 gap-2">
+          <button onclick="hideResetConfirm()"
+            class="py-2.5 border border-gray-300 text-gray-600 rounded-xl text-sm font-bold hover:bg-gray-50 transition">
+            취소
+          </button>
+          <button onclick="resetAllData()"
+            class="py-2.5 bg-red-600 text-white rounded-xl text-sm font-bold hover:bg-red-700 transition">
+            삭제 확인
+          </button>
+        </div>
+      </div>
     </div>
   </div>
 
@@ -1043,6 +1071,19 @@ function saveAndGoHome() {
   saveSubjects();
   switchScreen('screen-home');
   showToast('저장 완료!');
+}
+
+function showResetConfirm() {
+  document.getElementById('reset-confirm').classList.remove('hidden');
+}
+function hideResetConfirm() {
+  document.getElementById('reset-confirm').classList.add('hidden');
+}
+function resetAllData() {
+  localStorage.removeItem(PROFILE_KEY);
+  localStorage.removeItem(STORAGE_KEY);
+  localStorage.removeItem('hc_subjects_v2');
+  location.reload();
 }
 
 function showToast(msg) {
